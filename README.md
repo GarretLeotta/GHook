@@ -5,9 +5,9 @@ Global keyboard &amp; Mouse hooks for Scala
 Building
 --------
 
-sbt compile
-sbt javah
-make
+sbt compile<br/>
+sbt javah<br/>
+make<br/>
 
 
 License
