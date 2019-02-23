@@ -1,0 +1,17 @@
+.ensime_cache
+
+
+
+
+# Developer specific properties
+/build.properties
+/buildcharacter.properties
+
+# sbt's target directories
+/target/
+/project/target/
+/project/project/target/
+/project/project/project/target/
+/test/macro-annot/target/
+/build-sbt/
+local.sbt
