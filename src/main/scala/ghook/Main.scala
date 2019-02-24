@@ -25,10 +25,10 @@ object GHookTest extends JFXApp {
       content = new BorderPane {
         center = new Text("hello world")
         left = new Button("Register Hook") {
-          onAction = _ => println(s"Registering hook: ${globalHook.registerKeyboardHook()}")
+          onAction = _ => println(s"Registering hook: ${globalHook.registerHook()}")
         }
         right = new Button("Deregister Hook") {
-          onAction = _ => println(s"Deregistering hook: ${globalHook.deregisterKeyboardHook()}")
+          onAction = _ => println(s"Deregistering hook: ${globalHook.deregisterHook()}")
         }
       }
     }

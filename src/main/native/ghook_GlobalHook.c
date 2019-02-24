@@ -43,10 +43,7 @@ jobject hookObj = NULL;
 BOOL keyDown = FALSE;
 jmethodID pressMeth = NULL;
 jmethodID releaseMeth = NULL;
-jmethodID changeKeyHook = NULL;
-jmethodID changeMouseHook = NULL;
-
-DWORD hookThreadId = 0;
+jmethodID changeHook = NULL;
 
 /** TODO: monitor performance of attach / detach
     If they are only called when the PTT keys are pressed and released, shouldnt be too bad
@@ -144,7 +141,7 @@ LRESULT CALLBACK ghookChooseKeyCodeProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 if (pRaw->data.keyboard.Flags == RI_KEY_MAKE) {
                     if ((*jvm)->AttachCurrentThread(jvm, (void**)&env, NULL) >= JNI_OK) {
                         vkeyHook = pRaw->data.keyboard.VKey;
-                        (*env)->CallVoidMethod(env, hookObj, changeKeyHook, pRaw->data.keyboard.VKey);
+                        (*env)->CallVoidMethod(env, hookObj, changeHook, 'K', pRaw->data.keyboard.VKey);
                         (*jvm)->DetachCurrentThread(jvm);
                         RemoveWindowSubclass(hWnd, &ghookChooseKeyCodeProc, 1);
                         SetWindowSubclass(hWnd, &ghookHookEnabledProc, 1, 0);
@@ -155,7 +152,7 @@ LRESULT CALLBACK ghookChooseKeyCodeProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     if ((*jvm)->AttachCurrentThread(jvm, (void**)&env, NULL) >= JNI_OK) {
                         mouseDownHook = pRaw->data.mouse.usButtonFlags;
                         mouseUpHook = 2 * pRaw->data.mouse.usButtonFlags;
-                        (*env)->CallVoidMethod(env, hookObj, changeMouseHook, pRaw->data.mouse.usButtonFlags);
+                        (*env)->CallVoidMethod(env, hookObj, changeHook, 'M', pRaw->data.mouse.usButtonFlags);
                         (*jvm)->DetachCurrentThread(jvm);
                         RemoveWindowSubclass(hWnd, &ghookChooseKeyCodeProc, 1);
                         SetWindowSubclass(hWnd, &ghookHookEnabledProc, 1, 0);
@@ -202,27 +199,16 @@ BOOL register_ghook(HWND hWnd) {
 }
 
 
-
-
-JNIEXPORT jshort JNICALL Java_ghook_GlobalHook_getInputKeyCode
-  (JNIEnv *env, jobject obj) {
-    return 1;
-}
-
-
-JNIEXPORT jboolean JNICALL Java_ghook_GlobalHook_registerKeyboardHook
+JNIEXPORT jboolean JNICALL Java_ghook_GlobalHook_registerHook
   (JNIEnv *env, jobject obj) {
     if(jvm==NULL) {
         (*env)->GetJavaVM(env, &jvm);
+        hookObj = (*env)->NewGlobalRef(env, obj);
+        jclass hookCls = (*env)->GetObjectClass(env, hookObj);
+        pressMeth = (*env)->GetMethodID(env, hookCls, "pressFunc", "()V");
+        releaseMeth = (*env)->GetMethodID(env, hookCls, "releaseFunc", "()V");
+        changeHook = (*env)->GetMethodID(env, hookCls, "changeHook", "(CS)V");
     }
-    hookThreadId = GetCurrentThreadId();
-
-    hookObj = (*env)->NewGlobalRef(env, obj);
-    jclass hookCls = (*env)->GetObjectClass(env, hookObj);
-    pressMeth = (*env)->GetMethodID(env, hookCls, "pressFunc", "()V");
-    releaseMeth = (*env)->GetMethodID(env, hookCls, "releaseFunc", "()V");
-    changeKeyHook = (*env)->GetMethodID(env, hookCls, "changeKeyHook", "(S)V");
-    changeMouseHook = (*env)->GetMethodID(env, hookCls, "changeMouseHook", "(S)V");
 
     if (pressMeth == 0 || releaseMeth == 0) {
         (*env)->ExceptionClear(env);
@@ -230,20 +216,26 @@ JNIEXPORT jboolean JNICALL Java_ghook_GlobalHook_registerKeyboardHook
         return 0;
     }
 
-
     HWND window_tgt = GetActiveWindow();
     return register_ghook(window_tgt);
 }
 
-JNIEXPORT jboolean JNICALL Java_ghook_GlobalHook_deregisterKeyboardHook
+JNIEXPORT jboolean JNICALL Java_ghook_GlobalHook_deregisterHook
   (JNIEnv *env, jobject obj) {
+    if(jvm==NULL) {
+        (*env)->GetJavaVM(env, &jvm);
+        hookObj = (*env)->NewGlobalRef(env, obj);
+        jclass hookCls = (*env)->GetObjectClass(env, hookObj);
+        pressMeth = (*env)->GetMethodID(env, hookCls, "pressFunc", "()V");
+        releaseMeth = (*env)->GetMethodID(env, hookCls, "releaseFunc", "()V");
+        changeHook = (*env)->GetMethodID(env, hookCls, "changeHook", "(CS)V");
+    }
+
     HWND window_tgt = GetActiveWindow();
     vkeyHook = 0;
     mouseDownHook = 0;
     mouseUpHook = 0;
-    (*env)->CallVoidMethod(env, hookObj, changeKeyHook, 0);
-    (*env)->CallVoidMethod(env, hookObj, changeKeyHook, 0);
-    (*env)->CallVoidMethod(env, hookObj, changeKeyHook, 0);
+    (*env)->CallVoidMethod(env, hookObj, changeHook, 'X', 0);
     BOOL x = RemoveWindowSubclass(window_tgt, &ghookChooseKeyCodeProc, 1);
     BOOL y = RemoveWindowSubclass(window_tgt, &ghookHookEnabledProc, 1);
     return x || y;

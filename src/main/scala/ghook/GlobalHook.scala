@@ -2,10 +2,16 @@ package ghook
 
 import scala.collection.mutable.Buffer
 
+import scalafx.Includes._
+import scalafx.application.Platform
+import scalafx.beans.property.ObjectProperty
+
 object GlobalHook {
-  sealed trait HookType
-  case object KeyboardHook extends HookType
-  case object MouseHook extends HookType
+  sealed trait InputDevice
+  case object Keyboard extends InputDevice
+  case object Mouse extends InputDevice
+  case object NoInput extends InputDevice
+  case class KeyBinding(hid: InputDevice, keyCode: Short)
 }
 
 
@@ -14,33 +20,22 @@ class GlobalHook(
     pressCallback: () => Unit,
     releaseCallback: () => Unit,
   ) {
+  import GlobalHook._
   //Load JNI DLL -- does this work across threads?
   LoadNativeLibraries()
 
-  var status: Option[GlobalHook.HookType] = None
-  var keyboardHookCode: Short = 0
-  var mouseHookCode: Short = 0
+  var hookProp = ObjectProperty[KeyBinding](this, "hookProp")
 
-  /* Returns input code struct, (keyboard, 0xwhatever) or (mouse, 0xwhatever) */
-  @native def getInputKeyCode(): Short
+  @native def registerHook(): Boolean
+  @native def deregisterHook(): Boolean
 
-  @native def registerKeyboardHook(): Boolean
-  @native def deregisterKeyboardHook(): Boolean
-
-
-  @native def testFunction(): Array[Short]
-
-  /* Easier to call anonymous functions through JNI this way */
-  def changeKeyHook(code: Short): Unit = {
-    println(s"Changing Keyboard hook to $code")
-    status = Some(GlobalHook.KeyboardHook)
-    keyboardHookCode = code
-  }
-
-  def changeMouseHook(code: Short): Unit = {
-    println(s"Changing Mouse hook to $code")
-    status = Some(GlobalHook.MouseHook)
-    mouseHookCode = code
+  def changeHook(inputDevice: Char, code: Short): Unit = {
+    inputDevice match {
+      case 'K' => hookProp.update(KeyBinding(Keyboard, code))
+      case 'M' => hookProp.update(KeyBinding(Mouse, code))
+      case 'X' => hookProp.update(KeyBinding(NoInput, 0))
+      case _ => ()
+    }
   }
 
   def pressFunc(): Unit = {
