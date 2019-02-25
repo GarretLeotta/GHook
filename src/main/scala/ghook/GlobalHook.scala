@@ -26,8 +26,11 @@ class GlobalHook(
 
   var hookProp = ObjectProperty[KeyBinding](this, "hookProp")
 
+  /* TODO: these names suck */
   @native def registerHook(): Boolean
   @native def deregisterHook(): Boolean
+
+  @native def registerHookWithCode(inputDevice: Char, code: Short): Boolean
 
   def changeHook(inputDevice: Char, code: Short): Unit = {
     inputDevice match {

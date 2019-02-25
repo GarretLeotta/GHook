@@ -27,6 +27,10 @@
 #define MOUSE_DOWN_FLAGS (RI_MOUSE_BUTTON_1_DOWN | RI_MOUSE_BUTTON_2_DOWN | RI_MOUSE_BUTTON_3_DOWN | RI_MOUSE_BUTTON_4_DOWN | RI_MOUSE_BUTTON_5_DOWN)
 #define MOUSE_UP_FLAGS (RI_MOUSE_BUTTON_1_UP | RI_MOUSE_BUTTON_2_UP | RI_MOUSE_BUTTON_3_UP | RI_MOUSE_BUTTON_4_UP | RI_MOUSE_BUTTON_5_UP)
 
+#define INPUT_NO_ID 'X'
+#define INPUT_MOUSE_ID 'M'
+#define INPUT_KEYBOARD_ID 'K'
+
 /** PROBABLY BAD:
     Right now, depending on property of WINAPI constants, (mouse_up * 2 == mouse_down)
     Should change logic so I don't depend on this quirk
@@ -108,7 +112,6 @@ LRESULT CALLBACK ghookHookEnabledProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
             free(lpb);
             break;
         case WM_NCDESTROY:
-            //printf("Removing Windows Subclass!\n");
             RemoveWindowSubclass(hWnd, &ghookHookEnabledProc, 1);
             break;
     }
@@ -141,7 +144,7 @@ LRESULT CALLBACK ghookChooseKeyCodeProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 if (pRaw->data.keyboard.Flags == RI_KEY_MAKE) {
                     if ((*jvm)->AttachCurrentThread(jvm, (void**)&env, NULL) >= JNI_OK) {
                         vkeyHook = pRaw->data.keyboard.VKey;
-                        (*env)->CallVoidMethod(env, hookObj, changeHook, 'K', pRaw->data.keyboard.VKey);
+                        (*env)->CallVoidMethod(env, hookObj, changeHook, INPUT_KEYBOARD_ID, pRaw->data.keyboard.VKey);
                         (*jvm)->DetachCurrentThread(jvm);
                         RemoveWindowSubclass(hWnd, &ghookChooseKeyCodeProc, 1);
                         SetWindowSubclass(hWnd, &ghookHookEnabledProc, 1, 0);
@@ -152,7 +155,7 @@ LRESULT CALLBACK ghookChooseKeyCodeProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     if ((*jvm)->AttachCurrentThread(jvm, (void**)&env, NULL) >= JNI_OK) {
                         mouseDownHook = pRaw->data.mouse.usButtonFlags;
                         mouseUpHook = 2 * pRaw->data.mouse.usButtonFlags;
-                        (*env)->CallVoidMethod(env, hookObj, changeHook, 'M', pRaw->data.mouse.usButtonFlags);
+                        (*env)->CallVoidMethod(env, hookObj, changeHook, INPUT_MOUSE_ID, pRaw->data.mouse.usButtonFlags);
                         (*jvm)->DetachCurrentThread(jvm);
                         RemoveWindowSubclass(hWnd, &ghookChooseKeyCodeProc, 1);
                         SetWindowSubclass(hWnd, &ghookHookEnabledProc, 1, 0);
@@ -162,7 +165,6 @@ LRESULT CALLBACK ghookChooseKeyCodeProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             free(lpb);
             break;
         case WM_NCDESTROY:
-            //printf("Removing Windows Subclass!\n");
             RemoveWindowSubclass(hWnd, &ghookChooseKeyCodeProc, 1);
             break;
     }
@@ -188,13 +190,12 @@ BOOL register_ghook(HWND hWnd) {
     rawInputDevices[1].hwndTarget = hWnd;
 
     nResult = RegisterRawInputDevices(rawInputDevices, 2, sizeof(*rawInputDevices));
-
+    //Am I free to free this?
+    free(rawInputDevices);
     if (nResult == TRUE) {
-        //printf("Setting windows subclass\n");
         return SetWindowSubclass(hWnd, &ghookChooseKeyCodeProc, 1, 0);
     } else {
-      //printf("register raw input devices failed %ld\n", GetLastError());
-      return FALSE;
+        return FALSE;
     }
 }
 
@@ -212,7 +213,6 @@ JNIEXPORT jboolean JNICALL Java_ghook_GlobalHook_registerHook
 
     if (pressMeth == 0 || releaseMeth == 0) {
         (*env)->ExceptionClear(env);
-        //printf("NATIVE: registerHook - No handle method!\n");
         return 0;
     }
 
@@ -235,8 +235,60 @@ JNIEXPORT jboolean JNICALL Java_ghook_GlobalHook_deregisterHook
     vkeyHook = 0;
     mouseDownHook = 0;
     mouseUpHook = 0;
-    (*env)->CallVoidMethod(env, hookObj, changeHook, 'X', 0);
+    (*env)->CallVoidMethod(env, hookObj, changeHook, INPUT_NO_ID, 0);
     BOOL x = RemoveWindowSubclass(window_tgt, &ghookChooseKeyCodeProc, 1);
     BOOL y = RemoveWindowSubclass(window_tgt, &ghookHookEnabledProc, 1);
     return x || y;
+}
+
+/* TODO: remove duplicate */
+JNIEXPORT jboolean JNICALL Java_ghook_GlobalHook_registerHookWithCode
+  (JNIEnv *env, jobject obj, jchar inputDevice, jshort keyCode) {
+    if(jvm==NULL) {
+        (*env)->GetJavaVM(env, &jvm);
+        hookObj = (*env)->NewGlobalRef(env, obj);
+        jclass hookCls = (*env)->GetObjectClass(env, hookObj);
+        pressMeth = (*env)->GetMethodID(env, hookCls, "pressFunc", "()V");
+        releaseMeth = (*env)->GetMethodID(env, hookCls, "releaseFunc", "()V");
+        changeHook = (*env)->GetMethodID(env, hookCls, "changeHook", "(CS)V");
+    }
+
+    if (pressMeth == 0 || releaseMeth == 0) {
+        (*env)->ExceptionClear(env);
+        return 0;
+    }
+
+    INT nResult;
+    HWND hWnd = GetActiveWindow();
+    RAWINPUTDEVICE rawInputDevice;
+    ZeroMemory(&rawInputDevice, sizeof(rawInputDevice));
+
+    rawInputDevice.dwFlags = RIDEV_INPUTSINK;
+    rawInputDevice.usUsagePage = HID_USAGE_PAGE_GENERIC;
+    rawInputDevice.hwndTarget = hWnd;
+
+    if (inputDevice == INPUT_KEYBOARD_ID ) {
+        rawInputDevice.usUsage = HID_USAGE_GENERIC_KEYBOARD;
+        nResult = RegisterRawInputDevices(&rawInputDevice, 1, sizeof(rawInputDevice));
+        if (nResult == TRUE) {
+            vkeyHook = keyCode;
+            (*env)->CallVoidMethod(env, hookObj, changeHook, INPUT_KEYBOARD_ID, keyCode);
+            return SetWindowSubclass(hWnd, &ghookHookEnabledProc, 1, 0);
+        } else {
+            return FALSE;
+        }
+    } else if (inputDevice == INPUT_MOUSE_ID ) {
+        rawInputDevice.usUsage = HID_USAGE_GENERIC_MOUSE;
+        nResult = RegisterRawInputDevices(&rawInputDevice, 1, sizeof(rawInputDevice));
+        if (nResult == TRUE) {
+            mouseDownHook = keyCode;
+            mouseUpHook = 2 * keyCode;
+            (*env)->CallVoidMethod(env, hookObj, changeHook, INPUT_MOUSE_ID, keyCode);
+            return SetWindowSubclass(hWnd, &ghookHookEnabledProc, 1, 0);
+        } else {
+            return FALSE;
+        }
+    } else {
+        return FALSE;
+    }
 }
