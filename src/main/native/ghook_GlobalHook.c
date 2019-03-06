@@ -267,14 +267,18 @@ JNIEXPORT jboolean JNICALL Java_ghook_GlobalHook_registerHookWithCode
     rawInputDevice.usUsagePage = HID_USAGE_PAGE_GENERIC;
     rawInputDevice.hwndTarget = hWnd;
 
+    //printf("native hwnd %d\n", hWnd);
+
     if (inputDevice == INPUT_KEYBOARD_ID ) {
         rawInputDevice.usUsage = HID_USAGE_GENERIC_KEYBOARD;
         nResult = RegisterRawInputDevices(&rawInputDevice, 1, sizeof(rawInputDevice));
         if (nResult == TRUE) {
             vkeyHook = keyCode;
             (*env)->CallVoidMethod(env, hookObj, changeHook, INPUT_KEYBOARD_ID, keyCode);
+            //printf("keyboard callin subclass\n");
             return SetWindowSubclass(hWnd, &ghookHookEnabledProc, 1, 0);
         } else {
+            //printf("keyboard, nresult false, %ld\n", GetLastError());
             return FALSE;
         }
     } else if (inputDevice == INPUT_MOUSE_ID ) {
@@ -284,11 +288,14 @@ JNIEXPORT jboolean JNICALL Java_ghook_GlobalHook_registerHookWithCode
             mouseDownHook = keyCode;
             mouseUpHook = 2 * keyCode;
             (*env)->CallVoidMethod(env, hookObj, changeHook, INPUT_MOUSE_ID, keyCode);
+            //printf("mouse callin subclass\n");
             return SetWindowSubclass(hWnd, &ghookHookEnabledProc, 1, 0);
         } else {
+            //printf("mouse, nresult false, %ld\n", GetLastError());
             return FALSE;
         }
     } else {
+        //printf("other char %c, nresult false\n", inputDevice);
         return FALSE;
     }
 }
